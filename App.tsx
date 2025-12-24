@@ -6,45 +6,57 @@ import Dashboard from './components/Dashboard';
 import RoutineList from './components/RoutineList';
 import Timetable from './components/Timetable';
 import EventList from './components/EventList';
+import Settings from './components/Settings';
+import CalendarView from './components/CalendarView';
 import AICoach from './components/AICoach';
 import { Routine, Event, AppView } from './types';
 
 const STORAGE_KEY_ROUTINES = 'zenflow_routines';
 const STORAGE_KEY_EVENTS = 'zenflow_events';
+const STORAGE_KEY_THEME = 'zenflow_theme';
 
 const App: React.FC = () => {
   const [view, setView] = useState<AppView>('dashboard');
-  const [routines, setRoutines] = useState<Routine[]>([]);
-  const [events, setEvents] = useState<Event[]>([]);
+  const [routines, setRoutines] = useState<Routine[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_ROUTINES);
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [events, setEvents] = useState<Event[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_EVENTS);
+    return saved ? JSON.parse(saved) : [];
+  });
   const [notifications, setNotifications] = useState<{id: string, message: string}[]>([]);
+  const [editTarget, setEditTarget] = useState<{ type: 'routine' | 'event', id: string } | null>(null);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    return (localStorage.getItem(STORAGE_KEY_THEME) as 'light' | 'dark') || 'light';
+  });
 
-  // Load Initial Data
-  useEffect(() => {
-    const savedRoutines = localStorage.getItem(STORAGE_KEY_ROUTINES);
-    const savedEvents = localStorage.getItem(STORAGE_KEY_EVENTS);
-    if (savedRoutines) setRoutines(JSON.parse(savedRoutines));
-    if (savedEvents) setEvents(JSON.parse(savedEvents));
-
-    // Request Notification Permissions if available
-    if ('Notification' in window && Notification.permission !== 'granted') {
-      Notification.requestPermission();
-    }
-  }, []);
-
-  // Save Data
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_ROUTINES, JSON.stringify(routines));
     localStorage.setItem(STORAGE_KEY_EVENTS, JSON.stringify(events));
   }, [routines, events]);
 
-  // Routine Handlers
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_THEME, theme);
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
+
   const addRoutine = (r: Omit<Routine, 'id' | 'completedDates'>) => {
     const newRoutine: Routine = {
       ...r,
       id: Math.random().toString(36).substr(2, 9),
-      completedDates: []
+      completedDates: [],
+      color: r.color || '#4f46e5'
     };
     setRoutines(prev => [...prev, newRoutine]);
+  };
+
+  const updateRoutine = (id: string, updates: Partial<Routine>) => {
+    setRoutines(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
   };
 
   const deleteRoutine = (id: string) => {
@@ -67,7 +79,6 @@ const App: React.FC = () => {
     }));
   };
 
-  // Event Handlers
   const addEvent = (e: Omit<Event, 'id'>) => {
     const newEvent: Event = {
       ...e,
@@ -76,99 +87,143 @@ const App: React.FC = () => {
     setEvents(prev => [...prev, newEvent]);
   };
 
+  const updateEvent = (id: string, updates: Partial<Event>) => {
+    setEvents(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
+  };
+
   const deleteEvent = (id: string) => {
     setEvents(prev => prev.filter(e => e.id !== id));
   };
 
-  // Notification Logic
-  const checkNotifications = useCallback(() => {
+  const triggerNotification = (message: string) => {
+    const id = Math.random().toString();
+    setNotifications(prev => [...prev, { id, message }]);
+    
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('ZenFlow Alert', { body: message });
+    }
+
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 10000);
+  };
+
+  const checkAppStatus = useCallback(() => {
     const now = new Date();
     const today = now.toISOString().split('T')[0];
+    const hours = now.getHours().toString().padStart(2, '0');
+    const minutes = now.getMinutes().toString().padStart(2, '0');
+    const currentTimeStr = `${hours}:${minutes}`;
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-    // Check routines
+    // 1. CLEANUP EXPIRED EVENTS
+    setEvents(prev => {
+      const filtered = prev.filter(e => {
+        const isPastDate = e.date < today;
+        const isPastTimeToday = e.date === today && e.endTime < currentTimeStr;
+        return !isPastDate && !isPastTimeToday;
+      });
+      return filtered.length !== prev.length ? filtered : prev;
+    });
+
+    // 2. CHECK NOTIFICATIONS
     routines.forEach(r => {
       const [h, m] = r.time.split(':').map(Number);
-      const routineMinutes = h * 60 + m;
-      const diff = routineMinutes - currentMinutes;
-      
-      if (diff === r.notifyBefore) {
+      if (h * 60 + m - currentMinutes === r.notifyBefore) {
         triggerNotification(`Upcoming Routine: ${r.title} starts in ${r.notifyBefore} minutes.`);
       }
     });
 
-    // Check events
     events.forEach(e => {
       if (e.date === today) {
         const [h, m] = e.startTime.split(':').map(Number);
-        const eventMinutes = h * 60 + m;
-        const diff = eventMinutes - currentMinutes;
-
-        if (diff === e.notifyBefore) {
+        if (h * 60 + m - currentMinutes === e.notifyBefore) {
           triggerNotification(`Upcoming Event: ${e.title} starts in ${e.notifyBefore} minutes.`);
         }
       }
     });
   }, [routines, events]);
 
-  const triggerNotification = (message: string) => {
-    const id = Math.random().toString();
-    setNotifications(prev => [...prev, { id, message }]);
-    
-    // System Notification
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification('ZenFlow Alert', { body: message });
-    }
-
-    // Auto clear after 10s
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== id));
-    }, 10000);
-  };
-
-  // Cron-like check every minute
   useEffect(() => {
-    const timer = setInterval(checkNotifications, 60000);
+    const timer = setInterval(checkAppStatus, 60000);
+    checkAppStatus();
     return () => clearInterval(timer);
-  }, [checkNotifications]);
+  }, [checkAppStatus]);
+
+  const handleEditFromTimetable = (type: 'routine' | 'event', id: string) => {
+    setEditTarget({ type, id });
+    setView(type === 'routine' ? 'routines' : 'events');
+  };
 
   const renderView = () => {
     switch(view) {
       case 'dashboard': return <Dashboard routines={routines} events={events} />;
-      case 'routines': return <RoutineList routines={routines} addRoutine={addRoutine} deleteRoutine={deleteRoutine} toggleRoutine={toggleRoutine} />;
-      case 'timetable': return <Timetable routines={routines} events={events} />;
-      case 'events': return <EventList events={events} addEvent={addEvent} deleteEvent={deleteEvent} />;
-      case 'ai': return <AICoach routines={routines} events={events} />;
+      case 'routines': 
+        return (
+          <RoutineList 
+            routines={routines} 
+            addRoutine={addRoutine} 
+            updateRoutine={updateRoutine}
+            deleteRoutine={deleteRoutine} 
+            toggleRoutine={toggleRoutine} 
+            editId={editTarget?.type === 'routine' ? editTarget.id : undefined}
+            onEditHandled={() => setEditTarget(null)}
+          />
+        );
+      case 'timetable': 
+        return (
+          <Timetable 
+            routines={routines} 
+            events={events} 
+            onEdit={handleEditFromTimetable}
+          />
+        );
+      case 'calendar':
+        return <CalendarView routines={routines} events={events} />;
+      case 'events': 
+        return (
+          <EventList 
+            events={events} 
+            addEvent={addEvent} 
+            updateEvent={updateEvent}
+            deleteEvent={deleteEvent} 
+            editId={editTarget?.type === 'event' ? editTarget.id : undefined}
+            onEditHandled={() => setEditTarget(null)}
+          />
+        );
+      case 'coach':
+        return <AICoach routines={routines} events={events} />;
+      case 'settings':
+        return <Settings theme={theme} setTheme={setTheme} />;
       default: return <Dashboard routines={routines} events={events} />;
     }
   };
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar currentView={view} setView={setView} />
+    <div className={`flex min-h-screen ${theme === 'dark' ? 'dark bg-slate-900' : 'bg-slate-50'}`}>
+      <Sidebar currentView={view} setView={(v) => setView(v as AppView)} />
       
-      <main className="flex-1 bg-slate-50 p-8 lg:p-12 relative overflow-y-auto max-h-screen">
+      <main className="flex-1 p-8 lg:p-12 relative overflow-y-auto max-h-screen">
         <div className="max-w-7xl mx-auto">
           {renderView()}
         </div>
 
-        {/* In-app Notification Stack */}
         <div className="fixed top-6 right-6 z-50 flex flex-col gap-3 w-80 pointer-events-none">
           {notifications.map(n => (
             <div 
               key={n.id} 
-              className="pointer-events-auto bg-white border-l-4 border-indigo-500 shadow-2xl p-4 rounded-xl flex items-start gap-3 animate-in slide-in-from-right duration-300"
+              className="pointer-events-auto bg-white dark:bg-slate-800 border-l-4 border-indigo-500 shadow-2xl p-4 rounded-xl flex items-start gap-3 animate-in slide-in-from-right duration-300"
             >
-              <div className="bg-indigo-50 p-2 rounded-lg">
-                <Bell className="w-5 h-5 text-indigo-600" />
+              <div className="bg-indigo-50 dark:bg-indigo-900/40 p-2 rounded-lg">
+                <Bell className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
               </div>
-              <div>
-                <p className="text-sm font-bold text-slate-800">Reminder</p>
-                <p className="text-xs text-slate-600 mt-0.5">{n.message}</p>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-slate-800 dark:text-slate-100">Reminder</p>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{n.message}</p>
               </div>
               <button 
                 onClick={() => setNotifications(prev => prev.filter(x => x.id !== n.id))}
-                className="ml-auto text-slate-300 hover:text-slate-500"
+                className="text-slate-300 dark:text-slate-500 hover:text-slate-500"
               >
                 &times;
               </button>
