@@ -1,6 +1,5 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
-import { Routine, Event } from "../types";
+import { Routine, Event } from "./types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
