@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { 
   LayoutDashboard, 
@@ -6,8 +5,7 @@ import {
   Clock, 
   CalendarDays,
   Calendar,
-  Settings,
-  Sparkles
+  Settings
 } from 'lucide-react';
 import { AppView } from '../types';
 
@@ -23,7 +21,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
     { id: 'calendar', label: 'Calendar', icon: Calendar },
     { id: 'routines', label: 'Routines', icon: CalendarCheck },
     { id: 'events', label: 'Events', icon: CalendarDays },
-    { id: 'coach', label: 'AI Coach', icon: Sparkles },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 

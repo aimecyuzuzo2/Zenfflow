@@ -1,4 +1,3 @@
-
 export type Frequency = 'daily' | 'weekly' | 'weekdays';
 
 export interface Routine {
@@ -22,7 +21,7 @@ export interface Event {
   notifyBefore: number; // minutes
 }
 
-export type AppView = 'dashboard' | 'routines' | 'timetable' | 'events' | 'calendar' | 'settings' | 'coach';
+export type AppView = 'dashboard' | 'routines' | 'timetable' | 'events' | 'calendar' | 'settings';
 
 export interface DailyStats {
   date: string;

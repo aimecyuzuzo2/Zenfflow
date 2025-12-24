@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Bell } from 'lucide-react';
 import Sidebar from './components/Sidebar';
@@ -8,7 +7,6 @@ import Timetable from './components/Timetable';
 import EventList from './components/EventList';
 import Settings from './components/Settings';
 import CalendarView from './components/CalendarView';
-import AICoach from './components/AICoach';
 import { Routine, Event, AppView } from './types';
 
 const STORAGE_KEY_ROUTINES = 'zenflow_routines';
@@ -191,8 +189,6 @@ const App: React.FC = () => {
             onEditHandled={() => setEditTarget(null)}
           />
         );
-      case 'coach':
-        return <AICoach routines={routines} events={events} />;
       case 'settings':
         return <Settings theme={theme} setTheme={setTheme} />;
       default: return <Dashboard routines={routines} events={events} />;
